@@ -1,0 +1,19 @@
+# CarBot 治安巡邏機器人 - 依賴套件
+
+# Flask 網頁伺服器
+flask
+
+# AI 模型推論
+ultralytics
+onnxruntime
+
+# 影像處理
+opencv-python-headless
+
+# 數值運算
+numpy
+
+# HTTP 請求（Telegram / OpenRouter Vision API）
+requests
+
+# GPIO 控制（樹莓派系統已內建 gpiozero + lgpio，無須安裝）

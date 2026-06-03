@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>搜救機器人 展示頁面</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box }
+        :root {
+            --bg:#f5f0eb; --card:#fff; --border:#e0dbd5; --text:#1a1a1a;
+            --dim:#888580; --dimmer:#b5b2ad;
+            --danger:#c0392b; --warn:#e67e22; --safe:#27ae60;
+        }
+        body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+        /* Header */
+        .hdr { background:var(--card); border-bottom:1px solid var(--border); padding:8px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100 }
+        .hdr h1 { font-size:.95rem; font-weight:700; letter-spacing:-.5px }
+        .hdr-right { display:flex; align-items:center; gap:10px }
+
+        .badge { padding:3px 10px; border-radius:14px; font-size:.65rem; font-weight:700; letter-spacing:.5px }
+        .badge-standby { background:#888; color:#f5f0eb }
+        .badge-search { background:#1a1a1a; color:#f5f0eb }
+        .badge-anomaly { background:var(--warn); color:#fff; animation:flash 1s infinite }
+        .badge-lock_on { background:#e74c3c; color:#fff; animation:flash .5s infinite }
+        .badge-inquiry { background:#8e44ad; color:#fff; animation:flash .8s infinite }
+        .badge-confirm { background:#2980b9; color:#fff }
+        .badge-report { background:var(--danger); color:#fff; animation:flash .3s infinite }
+        .badge-manual { background:#333; color:#f5f0eb }
+        @keyframes flash { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+        .sys-tag { font-size:.6rem; color:var(--dim); border:1px solid var(--border); padding:2px 8px; border-radius:10px }
+
+        /* Layout */
+        .main { display:grid; grid-template-columns:1fr 360px; gap:16px; padding:12px 16px; max-width:1400px; margin:0 auto }
+
+        /* Video */
+        .vid-box { border-radius:12px; overflow:hidden; background:#000; border:1px solid var(--border); aspect-ratio:4/3; position:relative }
+        .vid-box img { width:100%; height:100%; object-fit:cover }
+        .vid-overlay { position:absolute; top:8px; left:8px; display:flex; gap:6px }
+        .vid-tag { background:rgba(0,0,0,.6); color:#fff; padding:3px 10px; border-radius:8px; font-size:.6rem; font-weight:600 }
+        .vid-score { position:absolute; bottom:10px; right:10px; padding:6px 14px; border-radius:10px; font-size:1.2rem; font-weight:800; color:#fff }
+
+        /* Stage bar */
+        .stage-bar { display:flex; background:var(--card); border-radius:10px; border:1px solid var(--border); overflow:hidden; margin-top:12px }
+        .stage-step { flex:1; padding:10px 4px; text-align:center; font-size:.55rem; font-weight:600; color:var(--dim); transition:all .3s }
+        .stage-step .sn { display:block; font-size:.9rem; font-weight:800; margin-bottom:2px }
+        .stage-step.active { background:#1a1a1a; color:#fff }
+        .stage-step.passed { background:rgba(0,0,0,.06); color:#1a1a1a }
+        .stage-step.warn-bg { background:var(--warn); color:#fff }
+        .stage-step.danger-bg { background:var(--danger); color:#fff }
+        .stage-step.purple-bg { background:#8e44ad; color:#fff }
+
+        /* Cards */
+        .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; margin-top:12px }
+        .card-t { font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--dim); margin-bottom:10px }
+
+        /* Score gauge */
+        .gauge-wrap { text-align:center }
+        .gauge-ring { position:relative; width:130px; height:130px; margin:0 auto 8px }
+        .gauge-ring svg { width:100%; height:100%; transform:rotate(-90deg) }
+        .gauge-ring .bg { fill:none; stroke:var(--border); stroke-width:10 }
+        .gauge-ring .fg { fill:none; stroke-width:10; stroke-linecap:round; transition:all .5s }
+        .gauge-val { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:1.8rem; font-weight:900; letter-spacing:-1px }
+        .risk-tag { display:inline-block; padding:2px 12px; border-radius:10px; font-weight:700; font-size:.65rem; margin-top:4px }
+
+        /* Modal bars */
+        .mb { display:flex; align-items:center; gap:8px; margin-bottom:6px }
+        .mb-l { font-size:.6rem; font-weight:600; color:var(--dim); width:40px }
+        .mb-bg { flex:1; height:6px; background:var(--bg); border-radius:3px; overflow:hidden }
+        .mb-fill { height:100%; border-radius:3px; transition:width .5s }
+        .mb-v { font-size:.6rem; font-weight:700; width:32px; text-align:right }
+
+        /* Sensors */
+        .sensors { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px }
+        .sensor { background:var(--bg); border-radius:8px; padding:10px; text-align:center }
+        .sensor-v { font-size:1.2rem; font-weight:800 }
+        .sensor-l { font-size:.5rem; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-top:2px }
+
+        /* Audio */
+        .aud-row { display:flex; align-items:center; gap:8px; margin-bottom:6px }
+        .aud-dot { width:8px; height:8px; border-radius:50%; background:var(--dimmer); transition:all .3s }
+        .aud-dot.on { background:var(--safe); box-shadow:0 0 6px var(--safe) }
+        .aud-dot.warn { background:var(--warn); box-shadow:0 0 6px var(--warn) }
+        .aud-dot.alert { background:var(--danger); box-shadow:0 0 6px var(--danger) }
+        .aud-l { font-size:.6rem; font-weight:600; color:var(--dim); width:46px }
+        .aud-bar { flex:1; height:4px; background:var(--bg); border-radius:2px; overflow:hidden }
+        .aud-fill { height:100%; border-radius:2px; transition:width .2s }
+
+        /* Buttons */
+        .btn-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px }
+        .btn { padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); font-weight:600; font-size:.65rem; cursor:pointer; transition:all .15s; text-align:center }
+        .btn:hover { border-color:#333 }
+        .btn.active { background:#1a1a1a; color:#fff; border-color:#1a1a1a }
+        .btn.btn-d { border-color:var(--danger); color:var(--danger) }
+        .btn.btn-d:hover { background:var(--danger); color:#fff }
+        .btn.btn-w { border-color:var(--warn); color:var(--warn) }
+        .btn.btn-w:hover { background:var(--warn); color:#fff }
+        .btn.btn-s { border-color:var(--safe); color:var(--safe) }
+        .btn.btn-s:hover { background:var(--safe); color:#fff }
+        .btn.btn-p { border-color:#8e44ad; color:#8e44ad }
+        .btn.btn-p:hover { background:#8e44ad; color:#fff }
+        .btn-full { grid-column:1/-1 }
+
+        /* Events */
+        .ev-list { max-height:160px; overflow-y:auto }
+        .ev-item { display:flex; align-items:center; gap:10px; padding:8px; background:var(--bg); border-radius:6px; font-size:.6rem; margin-bottom:4px; border-left:3px solid var(--danger) }
+        .ev-score { font-weight:800; font-size:.85rem }
+        .ev-time { color:var(--dim) }
+
+        /* Sys dots */
+        .sys-row { display:flex; gap:12px }
+        .sys-item { display:flex; align-items:center; gap:4px; font-size:.6rem }
+        .sd { width:6px; height:6px; border-radius:50% }
+        .sd.on { background:var(--safe) }
+        .sd.off { background:var(--danger) }
+
+        /* Log */
+        .log-box { max-height:160px; overflow-y:auto; font-size:.6rem }
+        .log-e { padding:3px 0; border-bottom:1px solid var(--bg) }
+        .log-tm { color:var(--dim); margin-right:6px }
+        .lv-info { color:var(--dim) }
+        .lv-warn { color:var(--warn); font-weight:700 }
+        .lv-danger { color:var(--danger); font-weight:700 }
+
+        @media (max-width:800px) { .main { grid-template-columns:1fr } }
+    </style>
+</head>
+<body>
+    <div class="hdr">
+        <h1>搜救機器人 <a href="/" style="font-size:.65rem;color:var(--dim);text-decoration:none;margin-left:8px">回控制台</a></h1>
+        <div class="hdr-right">
+            <span class="sys-tag" id="mode-tag">MANUAL</span>
+            <div id="state-badge" class="badge badge-standby"><span id="state-text">STANDBY</span></div>
+        </div>
+    </div>
+
+    <div class="main">
+        <!-- 左欄 -->
+        <div>
+            <div class="vid-box">
+                <img src="/video_feed" alt="Live">
+                <div class="vid-overlay">
+                    <div class="vid-tag" id="v-mode">MANUAL</div>
+                    <div class="vid-tag" id="v-fps">-- fps</div>
+                    <div class="vid-tag" id="v-ms">-- ms</div>
+                </div>
+                <div class="vid-score" id="v-sc">0.00</div>
+            </div>
+
+            <!-- 階段進度 -->
+            <div class="stage-bar" id="stage-bar">
+                <div class="stage-step" data-s="STANDBY"><span class="sn">1</span>待命</div>
+                <div class="stage-step" data-s="SEARCH"><span class="sn">2</span>搜索</div>
+                <div class="stage-step" data-s="ANOMALY"><span class="sn">3</span>異常</div>
+                <div class="stage-step" data-s="LOCK_ON"><span class="sn">4</span>鎖定</div>
+                <div class="stage-step" data-s="INQUIRY"><span class="sn">5</span>詢問</div>
+                <div class="stage-step" data-s="CONFIRM"><span class="sn">6</span>確認</div>
+                <div class="stage-step" data-s="REPORT"><span class="sn">7</span>回報</div>
+            </div>
+
+            <!-- 模式控制 -->
+            <div class="card">
+                <div class="card-t">模式控制</div>
+                <div class="btn-grid">
+                    <button class="btn" id="btn-auto" onclick="cmd('mode_auto')">自動搜索</button>
+                    <button class="btn" id="btn-manual" onclick="cmd('mode_manual')">手動模式</button>
+                    <button class="btn btn-d" onclick="cmd('stop')">緊急停止</button>
+                    <button class="btn" onclick="cmd('home')">雲台歸位</button>
+                </div>
+                <div class="card-t" style="margin-top:12px">搜索策略</div>
+                <div class="btn-grid" style="grid-template-columns:1fr">
+                    <button class="btn active" id="sm-F" onclick="setSearchMode('F')">SLAM 掃描巡邏</button>
+                </div>
+                <div class="card-t" style="margin-top:12px">鏡頭亮度 (<span id="br-val">0</span>)</div>
+                <input type="range" min="-100" max="100" value="0" style="width:100%" onchange="setBrightness(this.value)" oninput="document.getElementById('br-val').innerText=this.value">
+            </div>
+
+            <!-- 手動階段切換 -->
+            <div class="card">
+                <div class="card-t">手動狀態切換</div>
+                <div class="btn-grid">
+                    <button class="btn" onclick="setStage('STANDBY')">STANDBY</button>
+                    <button class="btn" onclick="setStage('SEARCH')">SEARCH</button>
+                    <button class="btn btn-w" onclick="setStage('ANOMALY')">ANOMALY</button>
+                    <button class="btn btn-d" onclick="setStage('LOCK_ON')">LOCK_ON</button>
+                    <button class="btn btn-p" onclick="setStage('INQUIRY')">INQUIRY</button>
+                    <button class="btn btn-s" onclick="setStage('CONFIRM')">CONFIRM</button>
+                    <button class="btn btn-d" onclick="setStage('REPORT')">REPORT</button>
+                    <button class="btn" onclick="setStage('MANUAL')">MANUAL</button>
+                </div>
+            </div>
+
+            <!-- 功能測試 -->
+            <div class="card">
+                <div class="card-t">功能測試</div>
+                <div class="btn-grid">
+                    <button class="btn btn-p btn-full" onclick="cmd('test_inquiry')">測試實體語音詢問 (HRI)</button>
+                    <button class="btn btn-d btn-full" onclick="cmd('test_report')">觸發一般事件回報</button>
+                    <button class="btn btn-s btn-full" style="background-color: var(--danger); color: white;" onclick="cmd('trigger_critical_help')">強制警報 (免收音)</button>
+                    <button class="btn btn-w" onclick="simAudio('voice')">模擬呼救聲</button>
+                    <button class="btn btn-w" onclick="simAudio('knock')">模擬敲擊聲</button>
+                    <button class="btn" onclick="simAudio('clear')">清除音訊</button>
+                    <button class="btn btn-s" onclick="simScore(0.1)">Score 0.1</button>
+                    <button class="btn btn-w" onclick="simScore(0.45)">Score 0.45</button>
+                    <button class="btn btn-d" onclick="simScore(0.8)">Score 0.8</button>
+                </div>
+            </div>
+
+            <!-- 系統日誌 -->
+            <div class="card">
+                <div class="card-t">系統日誌</div>
+                <div class="log-box" id="log-box"></div>
+            </div>
+        </div>
+
+        <!-- 右欄 -->
+        <div>
+            <!-- VictimScore -->
+            <div class="card">
+                <div class="card-t">Victim Risk Score</div>
+                <div class="gauge-wrap">
+                    <div class="gauge-ring">
+                        <svg viewBox="0 0 130 130">
+                            <circle class="bg" cx="65" cy="65" r="52"/>
+                            <circle class="fg" id="g-arc" cx="65" cy="65" r="52" stroke-dasharray="326.7" stroke-dashoffset="326.7"/>
+                        </svg>
+                        <div class="gauge-val" id="g-val">0.00</div>
+                    </div>
+                    <div id="g-risk" class="risk-tag" style="background:var(--safe);color:#fff">LOW</div>
+                </div>
+            </div>
+
+            <!-- 多模態分量（含生命徵象） -->
+            <div class="card">
+                <div class="card-t">多模態融合分量</div>
+                <div class="mb"><span class="mb-l">人體</span><div class="mb-bg"><div class="mb-fill" id="b-person" style="width:0;background:#1a1a1a"></div></div><span class="mb-v" id="bv-person">0</span></div>
+                <div class="mb"><span class="mb-l">姿態</span><div class="mb-bg"><div class="mb-fill" id="b-pose" style="width:0;background:#8e44ad"></div></div><span class="mb-v" id="bv-pose">0</span></div>
+                <div class="mb"><span class="mb-l">音訊</span><div class="mb-bg"><div class="mb-fill" id="b-audio" style="width:0;background:#2980b9"></div></div><span class="mb-v" id="bv-audio">0</span></div>
+                <div class="mb"><span class="mb-l">互動</span><div class="mb-bg"><div class="mb-fill" id="b-motion" style="width:0;background:var(--warn)"></div></div><span class="mb-v" id="bv-motion">0</span></div>
+                <div class="mb"><span class="mb-l">距離</span><div class="mb-bg"><div class="mb-fill" id="b-dist" style="width:0;background:var(--dimmer)"></div></div><span class="mb-v" id="bv-dist">0</span></div>
+                <div class="mb"><span class="mb-l">生命</span><div class="mb-bg"><div class="mb-fill" id="b-vital" style="width:0;background:#e74c3c"></div></div><span class="mb-v" id="bv-vital">0</span></div>
+            </div>
+
+            <!-- 生命徵象（B1/B2/B4 新增） -->
+            <div class="card">
+                <div class="card-t">生命徵象偵測</div>
+                <div class="sensors" style="grid-template-columns:1fr 1fr">
+                    <div class="sensor"><div class="sensor-v" id="s-hr" style="color:var(--danger)">--</div><div class="sensor-l">心率 BPM</div><div style="font-size:.5rem;color:var(--dim);margin-top:2px" id="s-hr-q">—</div></div>
+                    <div class="sensor"><div class="sensor-v" id="s-rr" style="color:#2980b9">--</div><div class="sensor-l">呼吸 /分</div><div style="font-size:.5rem;color:var(--dim);margin-top:2px" id="s-rr-q">—</div></div>
+                    <div class="sensor"><div class="sensor-v" id="s-blink">--</div><div class="sensor-l">眨眼 /分</div></div>
+                    <div class="sensor"><div class="sensor-v" id="s-cons" style="font-size:.85rem">UNKNOWN</div><div class="sensor-l">意識狀態</div></div>
+                </div>
+                <div class="mb" style="margin-top:8px">
+                    <span class="mb-l">微動</span>
+                    <div class="mb-bg"><div class="mb-fill" id="b-micro" style="width:0;background:#16a085"></div></div>
+                    <span class="mb-v" id="bv-micro">0</span>
+                </div>
+                <div class="mb" style="margin-top:4px">
+                    <span class="mb-l">眼睛</span>
+                    <div style="flex:1;font-size:.65rem;padding-left:4px;font-weight:700" id="s-eye">UNKNOWN</div>
+                </div>
+                <div class="mb" style="margin-top:4px">
+                    <span class="mb-l">可信度</span>
+                    <div class="mb-bg"><div class="mb-fill" id="b-vconf" style="width:0;background:#2ecc71"></div></div>
+                    <span class="mb-v" id="bv-vconf">0%</span>
+                </div>
+                <div class="mb" style="margin-top:4px">
+                    <span class="mb-l">已標記</span>
+                    <div style="flex:1;font-size:.65rem;padding-left:4px;font-weight:700" id="s-reported">0</div>
+                </div>
+            </div>
+
+            <!-- 基本感測器 -->
+            <div class="card">
+                <div class="card-t">基本感測器</div>
+                <div class="sensors">
+                    <div class="sensor"><div class="sensor-v" id="s-person">0</div><div class="sensor-l">人數</div></div>
+                    <div class="sensor"><div class="sensor-v" id="s-dist">--</div><div class="sensor-l">LiDAR cm</div></div>
+                    <div class="sensor"><div class="sensor-v" id="s-fallen">0</div><div class="sensor-l">倒地</div></div>
+                    <div class="sensor"><div class="sensor-v" id="s-unique">0</div><div class="sensor-l">唯一人次</div></div>
+                    <div class="sensor"><div class="sensor-v" id="s-coverage">0%</div><div class="sensor-l">地圖覆蓋</div></div>
+                    <div class="sensor"><div class="sensor-v" id="s-alerts">0</div><div class="sensor-l">警報次數</div></div>
+                </div>
+            </div>
+
+            <!-- 音訊偵測 -->
+            <div class="card">
+                <div class="card-t">音訊偵測</div>
+                <div class="aud-row"><div class="aud-dot" id="a-voice"></div><span class="aud-l">語音</span><div class="aud-bar"><div class="aud-fill" id="af-voice" style="width:0;background:var(--safe)"></div></div></div>
+                <div class="aud-row"><div class="aud-dot" id="a-help"></div><span class="aud-l">呼救</span><div class="aud-bar"><div class="aud-fill" id="af-help" style="width:0;background:var(--warn)"></div></div></div>
+                <div class="aud-row"><div class="aud-dot" id="a-knock"></div><span class="aud-l">敲擊</span><div class="aud-bar"><div class="aud-fill" id="af-knock" style="width:0;background:var(--danger)"></div></div></div>
+                <div class="aud-row"><div class="aud-dot" id="a-rms"></div><span class="aud-l">音量</span><div class="aud-bar"><div class="aud-fill" id="af-rms" style="width:0;background:var(--dimmer)"></div></div></div>
+            </div>
+
+            <!-- 系統狀態 -->
+            <div class="card">
+                <div class="card-t">系統狀態</div>
+                <div class="sys-row" style="flex-wrap:wrap;gap:8px">
+                    <div class="sys-item"><div class="sd" id="d-cam"></div>CAM</div>
+                    <div class="sys-item"><div class="sd" id="d-ai"></div><span id="ai-be">AI</span></div>
+                    <div class="sys-item"><div class="sd" id="d-mic"></div>MIC</div>
+                    <div class="sys-item"><div class="sd" id="d-gpio"></div>GPIO</div>
+                    <div class="sys-item"><div class="sd" id="d-lidar"></div>LiDAR</div>
+                </div>
+                <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;font-size:.55rem;color:var(--dim)">
+                    <span id="perf-info">-- fps | -- ms</span>
+                    <span id="night-info">夜視: --</span>
+                    <span id="pan-info">Pan: 0°</span>
+                </div>
+            </div>
+
+            <!-- 事件紀錄 -->
+            <div class="card">
+                <div class="card-t">事件紀錄 <span id="ev-cnt" style="font-weight:400">0</span></div>
+                <div class="ev-list" id="ev-list">
+                    <div style="color:var(--dim);font-size:.6rem;text-align:center;padding:16px">尚無事件</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === 帶超時的 fetch，避免連線卡死 ===
+        function cmd(action, extra) {
+            const body = Object.assign({action}, extra||{});
+            const ctrl = new AbortController();
+            setTimeout(()=>ctrl.abort(), 2000);
+            fetch('/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctrl.signal}).catch(()=>{});
+        }
+        function setStage(s) { cmd('set_stage', {stage:s}); }
+        function simAudio(t) { cmd('simulate_audio', {event_type:t}); }
+        function simScore(v) { cmd('simulate_score', {score:v}); }
+        function setSearchMode(m) { cmd('search_mode', {search_mode:m}); }
+        function setBrightness(v) { cmd('set_brightness', {value:parseInt(v)}); }
+
+        const stageOrder = ['STANDBY','SEARCH','ANOMALY','LOCK_ON','INQUIRY','CONFIRM','REPORT'];
+        const cMap = {STANDBY:'badge-standby',SEARCH:'badge-search',ANOMALY:'badge-anomaly',LOCK_ON:'badge-lock_on',INQUIRY:'badge-inquiry',CONFIRM:'badge-confirm',REPORT:'badge-report',MANUAL:'badge-manual'};
+        const sClass = {ANOMALY:'warn-bg',LOCK_ON:'danger-bg',INQUIRY:'purple-bg',REPORT:'danger-bg'};
+        let prevLogLen = 0;
+        let polling = false;  // 防止 poll 堆疊
+
+        function setBar(id, vid, v) {
+            document.getElementById(id).style.width = Math.min(v*100,100)+'%';
+            document.getElementById(vid).textContent = (typeof v==='number') ? v.toFixed(2) : v;
+        }
+
+        function poll() {
+            if(polling) return;  // 上一次還沒回來就跳過
+            polling = true;
+            const ctrl = new AbortController();
+            setTimeout(()=>ctrl.abort(), 3000);
+            fetch('/status',{signal:ctrl.signal}).then(r=>r.json()).then(d=>{
+                const stage = d.mission_stage||'STANDBY';
+                const score = d.victim_score||0;
+                const risk = d.risk_level||'LOW';
+
+                // Badge
+                document.getElementById('state-badge').className = 'badge '+(cMap[stage]||'badge-standby');
+                document.getElementById('state-text').textContent = stage;
+                document.getElementById('mode-tag').textContent = d.mode?d.mode.toUpperCase():'MANUAL';
+                document.getElementById('btn-auto').classList.toggle('active', d.mode==='auto');
+                document.getElementById('btn-manual').classList.toggle('active', d.mode==='manual');
+                const isManual = d.mode==='manual';
+                ['F'].forEach(m=>{const b=document.getElementById('sm-'+m);if(b){b.classList.toggle('active', d.search_mode===m);b.disabled=isManual;b.style.opacity=isManual?'0.35':'1';}});
+
+                // Stage bar
+                const si = stageOrder.indexOf(stage);
+                document.querySelectorAll('.stage-step').forEach((el,i)=>{
+                    el.className='stage-step';
+                    const ss=el.dataset.s;
+                    if(ss===stage) el.classList.add(sClass[ss]||'active');
+                    else if(i<si) el.classList.add('passed');
+                });
+
+                // Gauge
+                const circ = 2*Math.PI*52;
+                document.getElementById('g-arc').style.strokeDashoffset = circ*(1-score);
+                document.getElementById('g-arc').style.stroke = score>=.6?'var(--danger)':score>=.3?'var(--warn)':'var(--safe)';
+                document.getElementById('g-val').textContent = score.toFixed(2);
+                document.getElementById('g-val').style.color = score>=.6?'var(--danger)':score>=.3?'var(--warn)':'var(--safe)';
+                const rb = document.getElementById('g-risk');
+                rb.textContent=risk;
+                rb.style.background = risk==='HIGH'?'var(--danger)':risk==='SUSPECT'?'var(--warn)':'var(--safe)';
+
+                // Video overlay
+                document.getElementById('v-sc').textContent = score.toFixed(2);
+                document.getElementById('v-sc').style.background = score>=.6?'rgba(192,57,43,.8)':score>=.3?'rgba(230,126,34,.8)':'rgba(39,174,96,.6)';
+                document.getElementById('v-sc').style.color='#fff';
+                document.getElementById('v-mode').textContent = d.mode?d.mode.toUpperCase():'MANUAL';
+                document.getElementById('v-fps').textContent = (d.fps||'--')+' fps';
+                document.getElementById('v-ms').textContent = (d.detect_ms||'--')+' ms';
+
+                // Modal bars（新增 vital_signs 分量）
+                const c = d.fusion_components||{};
+                setBar('b-person','bv-person',c.person||0);
+                setBar('b-pose','bv-pose',c.pose||0);
+                setBar('b-audio','bv-audio',c.audio||0);
+                setBar('b-motion','bv-motion',c.motion||0);
+                setBar('b-dist','bv-dist',c.distance||0);
+                setBar('b-vital','bv-vital',c.vital_signs||c.vital||0);
+
+                // 基本感測器
+                document.getElementById('s-person').textContent = d.person_count;
+                document.getElementById('s-dist').textContent = d.distance_cm>=0?d.distance_cm:'--';
+                document.getElementById('s-fallen').textContent = d.fallen_count;
+                const uEl = document.getElementById('s-unique');  if(uEl) uEl.textContent = d.unique_person_count||0;
+                const cvEl = document.getElementById('s-coverage'); if(cvEl) cvEl.textContent = Math.round(d.heat_map_coverage||0)+'%';
+                const alEl = document.getElementById('s-alerts');  if(alEl) alEl.textContent = d.alert_count||0;
+
+                // 生命徵象（B1 呼吸率 / B2 微動 / B4 眨眼率 / 意識）
+                const hr = d.heart_rate_bpm||-1;
+                const hrEl = document.getElementById('s-hr');
+                if (hrEl) hrEl.textContent = hr>0?Math.round(hr):'--';
+                const hrqEl = document.getElementById('s-hr-q');
+                if (hrqEl) hrqEl.textContent = d.rppg_signal_quality||'—';
+                const rr = d.respiration_rate||-1;
+                const rrEl = document.getElementById('s-rr');
+                if (rrEl) rrEl.textContent = rr>0?Math.round(rr):'--';
+                const rrqEl = document.getElementById('s-rr-q');
+                if (rrqEl) rrqEl.textContent = d.resp_confidence>0?('信心 '+Math.round(d.resp_confidence*100)+'%'):'—';
+                const blink = d.blink_rate_per_min;
+                const blinkEl = document.getElementById('s-blink');
+                if (blinkEl) blinkEl.textContent = (blink!==undefined && blink>=0)?blink.toFixed(0):'--';
+                const consEl = document.getElementById('s-cons');
+                const consState = d.consciousness_state||'UNKNOWN';
+                if (consEl) {
+                    consEl.textContent = consState;
+                    consEl.style.color = consState==='AWAKE'?'var(--safe)':
+                                         consState==='UNCONSCIOUS'?'var(--danger)':
+                                         consState==='DROWSY'?'var(--warn)':'var(--dim)';
+                }
+                const mm = d.micro_motion_score||0;
+                const mmEl = document.getElementById('b-micro');
+                if (mmEl) mmEl.style.width = (mm*100).toFixed(0)+'%';
+                const mmvEl = document.getElementById('bv-micro');
+                if (mmvEl) mmvEl.textContent = mm.toFixed(2);
+                const eyeEl = document.getElementById('s-eye');
+                if (eyeEl) {
+                    eyeEl.textContent = d.eye_state||'UNKNOWN';
+                    eyeEl.style.color = d.eye_state==='OPEN'?'var(--safe)':
+                                        d.eye_state==='CLOSED'?'var(--danger)':'var(--dim)';
+                }
+                const vc = d.vital_confidence || 0;
+                const vcEl = document.getElementById('b-vconf');
+                if (vcEl) vcEl.style.width = Math.round(vc * 100) + '%';
+                const vcvEl = document.getElementById('bv-vconf');
+                if (vcvEl) vcvEl.textContent = Math.round(vc * 100) + '%';
+                const repEl = document.getElementById('s-reported');
+                if (repEl) repEl.textContent = d.reported_victim_count || 0;
+
+                // Audio
+                const ae = d.audio_event||{};
+                document.getElementById('a-voice').className = 'aud-dot'+(ae.has_voice?' on':'');
+                document.getElementById('a-help').className = 'aud-dot'+(ae.help_score>.5?' alert':ae.help_score>.2?' warn':'');
+                document.getElementById('a-knock').className = 'aud-dot'+(ae.knock_detected?' alert':'');
+                document.getElementById('a-rms').className = 'aud-dot'+(ae.rms_level>.03?' on':'');
+                document.getElementById('af-voice').style.width = (ae.has_voice?80:0)+'%';
+                document.getElementById('af-help').style.width = ((ae.help_score||0)*100)+'%';
+                document.getElementById('af-knock').style.width = (ae.knock_detected?80:0)+'%';
+                document.getElementById('af-rms').style.width = Math.min((ae.rms_level||0)*500,100)+'%';
+
+                // 系統狀態（含 LiDAR / 夜視 / Pan）
+                document.getElementById('d-cam').className = 'sd '+(d.camera_ok?'on':'off');
+                document.getElementById('d-ai').className = 'sd '+(d.ai_loaded?'on':'off');
+                document.getElementById('d-mic').className = 'sd '+(d.mic_ok?'on':'off');
+                document.getElementById('d-gpio').className = 'sd '+(d.gpio_ok?'on':'off');
+                const lidarEl = document.getElementById('d-lidar');
+                if (lidarEl) lidarEl.className = 'sd '+((d.lidar_ok||d.ros_bridge_available)?'on':'off');
+                document.getElementById('perf-info').textContent = (d.fps||'--')+' fps | '+(d.detect_ms||'--')+' ms';
+                document.getElementById('ai-be').textContent = d.ai_backend||'AI';
+                const nvEl = document.getElementById('night-info');
+                if (nvEl) nvEl.textContent = '夜視: '+(d.night_vision||'--');
+                const panEl = document.getElementById('pan-info');
+                if (panEl) panEl.textContent = 'Pan: '+(d.patrol_pan||0)+'°';
+
+                // Events
+                const evts = d.events||[];
+                document.getElementById('ev-cnt').textContent = d.event_count||0;
+                if(evts.length>0) {
+                    document.getElementById('ev-list').innerHTML = evts.map(e=>
+                        '<div class="ev-item"><span class="ev-score" style="color:'+(e.risk_level==='HIGH'?'var(--danger)':'var(--warn)')+'">'+
+                        (e.victim_score||0).toFixed(2)+'</span><div style="flex:1"><div style="font-weight:600">'+
+                        e.risk_level+' - '+(e.mission_stage||'')+'</div><div class="ev-time">'+
+                        (e.timestamp||'')+' | '+(e.audio_event||'--')+'</div></div></div>'
+                    ).join('');
+                }
+
+                // Logs
+                if(d.logs && d.logs.length!==prevLogLen) {
+                    prevLogLen = d.logs.length;
+                    const lb = document.getElementById('log-box');
+                    lb.innerHTML = d.logs.slice(0,20).map(l=>{
+                        const lvc = {info:'lv-info',warn:'lv-warn',danger:'lv-danger'}[l.level]||'lv-info';
+                        const lvt = {info:'INFO',warn:'WARN',danger:'ALERT'}[l.level]||'INFO';
+                        return '<div class="log-e"><span class="log-tm">'+l.time+'</span><span class="'+lvc+'">'+lvt+'</span> '+l.msg+'</div>';
+                    }).join('');
+                }
+            }).catch(()=>{}).finally(()=>{ polling=false; });
+        }
+
+        setInterval(poll, 1000);
+        poll();
+    </script>
+</body>
+</html>

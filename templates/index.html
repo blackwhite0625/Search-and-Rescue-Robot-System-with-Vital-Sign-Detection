@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>搜救機器人 控制台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
+    <script src="/static/slam_map.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        :root {
+            --bg: #f5f0eb;
+            --card: #fff;
+            --border: #e0dbd5;
+            --text: #1a1a1a;
+            --dim: #888580;
+            --dimmer: #b5b2ad;
+            --danger: #c0392b;
+            --warn: #e67e22;
+            --safe: #27ae60;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            user-select: none;
+            -webkit-user-select: none
+        }
+
+        .hdr {
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100
+        }
+
+        .hdr h1 {
+            font-size: .95rem;
+            font-weight: 700;
+            letter-spacing: -.5px
+        }
+
+        .hdr-right {
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        .badge {
+            padding: 3px 10px;
+            border-radius: 14px;
+            font-size: .65rem;
+            font-weight: 700;
+            letter-spacing: .5px;
+            border: none
+        }
+
+        .badge-standby {
+            background: #888;
+            color: #f5f0eb
+        }
+
+        .badge-search {
+            background: #1a1a1a;
+            color: #f5f0eb
+        }
+
+        .badge-anomaly {
+            background: var(--warn);
+            color: #fff;
+            animation: flash 1s infinite
+        }
+
+        .badge-lock_on {
+            background: #e74c3c;
+            color: #fff;
+            animation: flash .5s infinite
+        }
+
+        .badge-inquiry {
+            background: #8e44ad;
+            color: #fff;
+            animation: flash .8s infinite
+        }
+
+        .badge-confirm {
+            background: #2980b9;
+            color: #fff
+        }
+
+        .badge-report {
+            background: var(--danger);
+            color: #fff;
+            animation: flash .3s infinite
+        }
+
+        .badge-manual {
+            background: #333;
+            color: #f5f0eb
+        }
+
+        .sys-tag {
+            font-size: .55rem;
+            color: var(--dimmer);
+            padding: 2px 6px;
+            border: 1px solid var(--border);
+            border-radius: 4px
+        }
+
+        @keyframes flash {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .4
+            }
+        }
+
+        .main {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px
+        }
+
+        /* 橫向（寬螢幕）佈局 — 由 body.horizontal class 啟用
+           設計原則：
+             - 左欄：影片 (flex) + stats + 控制 + log，垂直填滿視窗
+             - 右欄：地圖獨佔全高
+             - max-width 放寬以支援 iPad Pro / 2K 螢幕 */
+        body.horizontal .main {
+            max-width: 1900px;
+            display: grid;
+            grid-template-columns: minmax(420px, 1fr) minmax(500px, 1.15fr);
+            /* 左欄 row 高度：影片(flex) → stats(auto) → ctrls(1fr 吃剩) → log(固定) */
+            grid-template-rows: minmax(240px, 42vh) auto 1fr 100px;
+            grid-template-areas:
+                "vid  map"
+                "stat map"
+                "ctrl map"
+                "log  map";
+            gap: 10px;
+            padding: 10px 14px;
+            align-items: stretch;
+            height: calc(100vh - 60px);
+            max-height: calc(100vh - 60px);
+            overflow: hidden;
+            margin: 0 auto;
+        }
+
+        /* 影片：填滿分配的 grid cell（寬度 + 高度都吃滿） */
+        body.horizontal .main > .vid {
+            grid-area: vid;
+            min-height: 0;
+            height: 100%;           /* 吃滿 grid row 高度 */
+            overflow: hidden;
+            display: flex;           /* 讓 img 直接佔滿容器 */
+            align-items: center;
+            justify-content: center;
+        }
+        body.horizontal .main > .vid img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;     /* 保持 4:3 且無拉伸（留黑邊而非裁切） */
+            background: #000;
+            aspect-ratio: auto;
+            max-height: none;
+            display: block;
+        }
+
+        /* 橫向模式隱藏 sys-bar 節省垂直空間（狀態在 header 可見） */
+        body.horizontal .main > .sys-bar {
+            display: none;
+        }
+
+        body.horizontal .main > .stats {
+            grid-area: stat;
+            grid-template-columns: repeat(6, 1fr);
+        }
+        body.horizontal .main > .stats .st {
+            padding: 4px 2px;
+        }
+        body.horizontal .main > .stats .st-v {
+            font-size: .9rem;
+        }
+        body.horizontal .main > .stats .st-l {
+            font-size: .45rem;
+        }
+
+        body.horizontal .main > .ctrl-sec,
+        body.horizontal .main > .srv-sec:first-of-type,
+        body.horizontal .main > .ctrls {
+            grid-area: ctrl;
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        body.horizontal .main > .ctrls {
+            gap: 8px;
+        }
+        body.horizontal .main > .ctrls .pnl {
+            padding: 10px 10px 12px;
+        }
+        body.horizontal .main > .ctrls .pnl-t {
+            margin-bottom: 6px;
+        }
+
+        /* 地圖面板：佔右欄整個高度，不被 canvas 撐爆 */
+        body.horizontal .main > .srv-sec:nth-of-type(2),
+        body.horizontal .main > .srv-sec:last-of-type {
+            grid-area: map;
+            align-self: stretch;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            min-width: 0;
+            overflow: hidden;      /* 防止內容超出被切掉 */
+            max-height: calc(100vh - 60px);
+        }
+        body.horizontal .srv-pnl#map-pnl {
+            flex: 1;
+            min-height: 0;
+            overflow: hidden !important;
+            max-height: none !important;
+            display: flex;
+            flex-direction: column;
+        }
+        body.horizontal #slam-map-wrap {
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+        /* 關鍵：canvas 不再用 aspect-ratio:1，改吃容器可用空間 */
+        body.horizontal #slam-canvas {
+            flex: 1;
+            min-height: 0;
+            aspect-ratio: auto !important;
+            width: 100% !important;
+            max-height: 100% !important;
+            height: auto !important;
+            object-fit: contain;
+        }
+        /* 地圖按鈕列 + 圖例列：允許換行，避免被切 */
+        body.horizontal #map-pnl > div:first-child {
+            flex-wrap: wrap;
+        }
+
+        body.horizontal .main > .log {
+            grid-area: log;
+            max-height: 100%;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        /* ═══ 生命徵象面板（rPPG / 呼吸 / 眨眼 / 意識 / 微動 / 眼睛）═══ */
+        .vitals {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 10px;
+            margin-bottom: 8px;
+        }
+        .vitals-t {
+            font-size: .55rem;
+            font-weight: 700;
+            color: var(--dim);
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .vitals-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+        .vital {
+            background: var(--bg);
+            border-radius: 6px;
+            padding: 6px 4px;
+            text-align: center;
+            min-width: 0;
+        }
+        .vital-v {
+            font-size: .95rem;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+        .vital-l {
+            font-size: .5rem;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            margin-top: 2px;
+        }
+        .vital-sub {
+            font-size: .45rem;
+            color: var(--dim);
+            margin-top: 1px;
+        }
+        .vital-micro-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            font-size: .55rem;
+            color: var(--dim);
+        }
+        .vital-micro-bar {
+            flex: 1;
+            height: 5px;
+            background: var(--bg);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .vital-micro-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: #16a085;
+            width: 0%;
+            transition: width .3s;
+        }
+        /* 意識狀態彩色 */
+        .cons-awake { color: var(--safe) }
+        .cons-drowsy { color: var(--warn) }
+        .cons-unconscious { color: var(--danger); animation: flash 1s infinite }
+        .cons-unknown { color: var(--dim) }
+        /* B5 綜合生命跡象 */
+        .vital-overall {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+            padding: 6px 8px;
+            background: var(--bg);
+            border-radius: 6px;
+            font-size: .55rem;
+        }
+        .vital-overall-label { font-weight: 700; color: var(--dim); letter-spacing: .05em }
+        .vital-overall-badge {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: .6rem;
+            letter-spacing: .03em;
+        }
+        .vs-normal      { background: var(--safe);   color: #fff }
+        .vs-weak        { background: var(--warn);   color: #fff }
+        .vs-unconscious { background: var(--danger); color: #fff; animation: flash .8s infinite }
+        .vs-noresp      { background: #555;          color: #fff }
+        .vs-warmup      { background: var(--dimmer); color: #fff }
+        .vs-unknown     { background: var(--dimmer); color: #fff }
+        .vital-overall-bar {
+            flex: 1;
+            height: 6px;
+            background: var(--card);
+            border-radius: 3px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+        .vital-overall-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, var(--danger) 0%, var(--warn) 50%, var(--safe) 100%);
+            width: 0%;
+            transition: width .4s ease;
+        }
+        .vital-overall-val { font-weight: 700; min-width: 36px; text-align: right }
+        .vital-overall-conf {
+            font-weight: 700;
+            color: var(--dim);
+            min-width: 54px;
+            text-align: right;
+            font-size: .62rem;
+            font-variant-numeric: tabular-nums;
+        }
+        /* 橫向模式緊湊化：四格縮小字級 */
+        body.horizontal .vitals { padding: 6px 8px; margin-bottom: 6px }
+        body.horizontal .vital { padding: 4px 2px }
+        body.horizontal .vital-v { font-size: .8rem }
+        body.horizontal .vital-l { font-size: .42rem }
+        body.horizontal .vital-sub { font-size: .4rem }
+
+        /* 切換按鈕 */
+        .layout-toggle {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 3px 10px;
+            font-size: .65rem;
+            font-weight: 700;
+            color: var(--text);
+            cursor: pointer;
+        }
+        .layout-toggle:hover {
+            background: var(--border);
+        }
+        body.horizontal .layout-toggle {
+            background: var(--text);
+            color: var(--bg);
+        }
+
+        .vid {
+            position: relative;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--border)
+        }
+
+        .vid img {
+            width: 100%;
+            display: block;
+            aspect-ratio: 4/3;
+            object-fit: cover
+        }
+
+        .vid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 6px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(180deg, rgba(0, 0, 0, .55) 0%, transparent 100%)
+        }
+
+        .vid-tag {
+            font-size: .6rem;
+            font-weight: 700;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: rgba(255, 0, 0, .6)
+        }
+
+        .vid-perf {
+            font-size: .55rem;
+            color: rgba(255, 255, 255, .8);
+            font-variant-numeric: tabular-nums
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 6px
+        }
+
+        .st {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 4px;
+            text-align: center;
+            transition: border-color .3s
+        }
+
+        .st.danger {
+            border-color: var(--danger);
+            background: #fdf2f2
+        }
+
+        .st-v {
+            font-size: 1.15rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums
+        }
+
+        .st-l {
+            font-size: .5rem;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            margin-top: 2px
+        }
+
+        .c-n {
+            color: var(--text)
+        }
+
+        .c-s {
+            color: var(--safe)
+        }
+
+        .c-d {
+            color: var(--danger)
+        }
+
+        .c-w {
+            color: var(--warn)
+        }
+
+        .sys-bar {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap
+        }
+
+        .sys-chip {
+            font-size: .55rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            display: flex;
+            align-items: center;
+            gap: 4px
+        }
+
+        .sys-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            display: inline-block
+        }
+
+        .sys-dot.on {
+            background: var(--safe)
+        }
+
+        .sys-dot.off {
+            background: var(--danger)
+        }
+
+        .sys-dot.paused {
+            background: var(--warn)
+        }
+
+        .ctrls {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px
+        }
+
+        .pnl {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px
+        }
+
+        .pnl-t {
+            font-size: .6rem;
+            font-weight: 600;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+            text-align: center
+        }
+
+        .joy {
+            width: 140px;
+            height: 140px;
+            position: relative;
+            background: radial-gradient(circle, #eae5df, #ddd8d2);
+            border-radius: 50%;
+            border: 2px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        /* Movement 面板：搖桿 + 速度滑桿 水平排列 */
+        .mov-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .spd-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            height: 150px;
+        }
+
+        .spd-col .spd-lbl {
+            font-size: .55rem;
+            color: var(--dim);
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-align: center;
+        }
+
+        /* 垂直滑桿（相容 WebKit + 現代瀏覽器） */
+        .spd-sld {
+            -webkit-appearance: slider-vertical;
+            appearance: slider-vertical;
+            writing-mode: vertical-lr;
+            direction: rtl;
+            width: 26px;
+            flex: 1;
+            min-height: 90px;
+            background: transparent;
+        }
+
+        .spd-val {
+            font-size: .7rem;
+            font-weight: 700;
+            color: var(--text);
+            font-variant-numeric: tabular-nums;
+            min-width: 34px;
+            text-align: center;
+            padding: 2px 4px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--bg);
+        }
+
+        .btns {
+            display: flex;
+            flex-direction: column;
+            gap: 6px
+        }
+
+        .btn {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: .75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .15s;
+            background: var(--card);
+            color: var(--dim)
+        }
+
+        .btn:active {
+            transform: scale(.97)
+        }
+
+        .btn-a {
+            color: var(--text)
+        }
+
+        .btn-m {
+            color: var(--text)
+        }
+
+        .btn-s {
+            color: var(--danger);
+            border-color: rgba(192, 57, 43, .3)
+        }
+
+        .btn-h {
+            color: #555
+        }
+
+        .btn.on {
+            color: #fff
+        }
+
+        .btn-a.on {
+            background: #1a1a1a;
+            border-color: #1a1a1a
+        }
+
+        .btn-m.on {
+            background: #333;
+            border-color: #333
+        }
+
+        .srv-sec {
+            margin-top: 2px
+        }
+
+        .srv-btn {
+            width: 100%;
+            padding: 9px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: .75rem;
+            font-weight: 600;
+            cursor: pointer;
+            background: var(--card);
+            color: #555;
+            text-align: center;
+            transition: all .2s
+        }
+
+        .srv-btn.on {
+            background: #1a1a1a;
+            color: #f5f0eb;
+            border-color: #1a1a1a
+        }
+
+        .srv-pnl {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height .35s ease, opacity .25s ease;
+            opacity: 0
+        }
+
+        .srv-pnl.open {
+            max-height: 260px;
+            opacity: 1;
+            margin-top: 10px
+        }
+
+        .srv-info {
+            text-align: center;
+            font-size: .65rem;
+            color: var(--dim);
+            margin-top: 6px;
+            font-variant-numeric: tabular-nums
+        }
+
+        .log {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 14px
+        }
+
+        .log-t {
+            font-size: .6rem;
+            font-weight: 600;
+            color: var(--dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center
+        }
+
+        .log-cnt {
+            font-size: .55rem;
+            color: var(--dimmer);
+            font-weight: 400
+        }
+
+        .log-ls {
+            max-height: 160px;
+            overflow-y: auto;
+            font-size: .7rem;
+            color: var(--dim)
+        }
+
+        .log-e {
+            padding: 3px 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 6px;
+            align-items: baseline
+        }
+
+        .log-e:last-child {
+            border-bottom: none
+        }
+
+        .log-tm {
+            font-variant-numeric: tabular-nums;
+            color: var(--dimmer);
+            min-width: 52px
+        }
+
+        .log-lv {
+            font-size: .5rem;
+            font-weight: 700;
+            padding: 1px 4px;
+            border-radius: 3px;
+            text-transform: uppercase
+        }
+
+        .lv-info {
+            background: #eee;
+            color: #555
+        }
+
+        .lv-warn {
+            background: #fff3e0;
+            color: var(--warn)
+        }
+
+        .lv-danger {
+            background: #fde8e8;
+            color: var(--danger)
+        }
+
+        .log-mg {
+            flex: 1
+        }
+
+        @media(max-width:600px) {
+            .stats {
+                grid-template-columns: repeat(3, 1fr)
+            }
+
+            .ctrls {
+                grid-template-columns: 1fr
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 3px
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="hdr">
+        <h1>搜救機器人 <a href="/demo" style="font-size:12px;color:#999;text-decoration:none;font-weight:400;margin-left:8px;">▶ Demo</a></h1>
+        <div class="hdr-right">
+            <button class="layout-toggle" id="layout-btn" onclick="toggleLayout()" title="切換直向/橫向佈局">橫向</button>
+            <span class="sys-tag" id="mode-tag">MANUAL</span>
+            <div id="state-badge" class="badge badge-standby"><span id="state-text">STANDBY</span></div>
+        </div>
+    </header>
+
+    <main class="main">
+
+        <div class="vid">
+            <img id="video-stream" src="/video_feed" alt="Live">
+            <div class="vid-overlay">
+                <span class="vid-tag">LIVE</span>
+                <span class="vid-perf" id="perf-info">-- fps | -- ms</span>
+            </div>
+        </div>
+
+        <div class="sys-bar">
+            <div class="sys-chip"><span class="sys-dot" id="dot-cam"></span>攝影機</div>
+            <div class="sys-chip"><span class="sys-dot" id="dot-ai"></span><span id="ai-chip-text">AI 偵測</span></div>
+            <div class="sys-chip"><span class="sys-dot" id="dot-gpio"></span>GPIO</div>
+            <div class="sys-chip"><span class="sys-dot" id="dot-lidar"></span>LiDAR</div>
+            <div class="sys-chip">已標記 <strong id="reported-victims">0</strong></div>
+        </div>
+
+        <div class="stats">
+            <div class="st" id="st-person">
+                <div class="st-v c-n" id="v-person">0</div>
+                <div class="st-l">人數</div>
+            </div>
+            <div class="st" id="st-dist">
+                <div class="st-v c-s" id="v-dist">--</div>
+                <div class="st-l">LiDAR cm</div>
+            </div>
+            <div class="st" id="st-score">
+                <div class="st-v c-n" id="v-score">0.00</div>
+                <div class="st-l">風險分數</div>
+            </div>
+            <div class="st" id="st-fallen">
+                <div class="st-v c-n" id="v-fallen">0</div>
+                <div class="st-l">倒地</div>
+            </div>
+            <div class="st">
+                <div class="st-v c-n" id="v-alert">0</div>
+                <div class="st-l">警報</div>
+            </div>
+            <div class="st">
+                <div class="st-v c-n" id="v-fps">--</div>
+                <div class="st-l">FPS</div>
+            </div>
+        </div>
+
+        <!-- 生命徵象面板（rPPG 心率 / 呼吸率 / 眨眼率 / 意識 / 微動 / 眼睛）-->
+        <div class="vitals">
+            <div class="vitals-t">
+                <span>生命徵象</span>
+                <span id="vital-eye" style="font-size:.55rem;font-weight:700;color:var(--dim)">眼:--</span>
+            </div>
+            <div class="vitals-grid">
+                <div class="vital">
+                    <div class="vital-v" id="vital-hr" style="color:var(--danger)">--</div>
+                    <div class="vital-l">心率 BPM</div>
+                    <div class="vital-sub" id="vital-hr-q">—</div>
+                </div>
+                <div class="vital">
+                    <div class="vital-v" id="vital-rr" style="color:#2980b9">--</div>
+                    <div class="vital-l">呼吸 /分</div>
+                    <div class="vital-sub" id="vital-rr-q">—</div>
+                </div>
+                <div class="vital">
+                    <div class="vital-v" id="vital-blink">--</div>
+                    <div class="vital-l">眨眼 /分</div>
+                    <div class="vital-sub">&nbsp;</div>
+                </div>
+                <div class="vital">
+                    <div class="vital-v cons-unknown" id="vital-cons" style="font-size:.75rem">UNKNOWN</div>
+                    <div class="vital-l">意識狀態</div>
+                    <div class="vital-sub">&nbsp;</div>
+                </div>
+            </div>
+            <div class="vital-micro-row">
+                <span style="font-weight:700">微動</span>
+                <div class="vital-micro-bar"><div class="vital-micro-fill" id="vital-micro-fill"></div></div>
+                <span id="vital-micro-v" style="font-weight:700;min-width:30px;text-align:right">0.00</span>
+            </div>
+            <!-- B5: 綜合生命跡象 (心率+呼吸+眨眼+意識+微動 五項整合) -->
+            <div class="vital-overall">
+                <span class="vital-overall-label">綜合</span>
+                <span id="vital-overall-status" class="vital-overall-badge vs-unknown">未知</span>
+                <div class="vital-overall-bar">
+                    <div class="vital-overall-fill" id="vital-overall-fill"></div>
+                </div>
+                <span id="vital-overall-v" class="vital-overall-val">--</span>
+                <span id="vital-overall-conf" class="vital-overall-conf">信心--</span>
+            </div>
+        </div>
+
+        <div class="ctrls">
+            <div class="pnl">
+                <div class="pnl-t">Movement</div>
+                <div class="mov-row">
+                    <div id="joystick-zone" class="joy"></div>
+                    <div class="spd-col">
+                        <div class="spd-lbl">快</div>
+                        <input type="range" id="spd-slider" class="spd-sld"
+                               min="5" max="100" value="60" step="5"
+                               title="速度調節：越低越慢，越高越快">
+                        <div class="spd-lbl">慢</div>
+                        <div class="spd-val"><span id="spd-val">60</span>%</div>
+                    </div>
+                </div>
+            </div>
+            <div class="pnl">
+                <div class="pnl-t">Mode</div>
+                <div class="btns">
+                    <button id="btn-auto" class="btn btn-a" onclick="setMode('auto')">自動搜索</button>
+                    <button id="btn-manual" class="btn btn-m on" onclick="setMode('manual')">手動控制</button>
+                    <button class="btn btn-s" onclick="emergencyStop()">緊急停止</button>
+                    <button class="btn btn-h" onclick="servoHome()">雲台歸位</button>
+                    <a href="/demo" class="btn" style="text-decoration:none;text-align:center;background:#1e1b4b;color:white;">切換展示模式</a>
+                </div>
+            </div>
+            <div class="pnl">
+                <div class="pnl-t">Options</div>
+                <div style="display:grid; grid-template-columns: 1fr; gap: 6px;">
+                    <button class="btn on" id="sm-F" onclick="setSearchMode('F')" style="padding:10px 4px;">自動掃描巡邏 (SLAM)</button>
+                </div>
+                <div class="pnl-t" style="margin-top:10px; margin-bottom:4px;">亮度 (<span id="br-val">0</span>)</div>
+                <input type="range" min="-100" max="100" value="0" style="width:100%" onchange="setBrightness(this.value)" oninput="document.getElementById('br-val').innerText=this.value">
+                <div class="pnl-t" style="margin-top:14px; margin-bottom:4px;">語音對講</div>
+                <button class="btn" id="btn-intercom" onclick="cmd('toggle_intercom')" style="padding:8px 4px;margin-bottom:6px;">開啟對講</button>
+                <div id="intercom-panel" style="display:none;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+                        <button class="btn" id="btn-listen" onclick="toggleListen()" style="padding:8px 4px;">收音 OFF</button>
+                        <button class="btn" onclick="icSpeak()" style="padding:8px 4px;">發送語音</button>
+                    </div>
+                    <input id="ic-text" type="text" placeholder="輸入要對受困者說的話..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:.75rem;margin-bottom:4px;">
+                    <div id="ic-presets" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;"></div>
+                </div>
+                <div class="pnl-t" style="margin-top:10px; margin-bottom:4px;">Emergency & Test</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+                    <button class="btn" style="background:var(--warn); color:white; border:none;" onclick="cmd('test_inquiry')">測試語音詢問</button>
+                    <button class="btn" style="background:var(--danger); color:white; border:none;" onclick="cmd('trigger_critical_help')">強制警報</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="srv-sec">
+            <button id="map-btn" class="srv-btn" onclick="toggleMap()">地圖面板 (OFF)</button>
+            <div id="map-pnl" class="srv-pnl">
+                <!-- 標題列 -->
+                <div style="display:flex;gap:4px;margin:6px 0 4px;">
+                    <span style="font-size:.65rem;font-weight:700;color:var(--accent);align-self:center;padding:0 4px;">SLAM 地圖</span>
+                    <span style="flex:1"></span>
+                    <span style="font-size:.55rem;color:var(--dim);font-weight:600;align-self:center;">軌跡 <span id="map-coverage">0</span> 點</span>
+                    <button class="btn" style="padding:4px 10px;font-size:.55rem;width:auto;" onclick="cmd('refresh_slam_map')" title="強制刷新地圖（換房間後用）">刷新</button>
+                    <button class="btn" style="padding:4px 10px;font-size:.55rem;width:auto;" onclick="cmd('reset_heat_map')" title="清空本地軌跡、熱區與巡邏記憶">重置</button>
+                    <button class="btn" style="padding:4px 10px;font-size:.55rem;width:auto;background:#b91c1c;color:white;border-color:#991b1b;" onclick="rebuildSlamMap()" title="重啟 SLAM 服務，完全清空 slam_toolbox 內部地圖">完全重建</button>
+                </div>
+                <!-- SLAM 地圖 Canvas (唯一地圖) -->
+                <div id="slam-map-wrap">
+                    <canvas id="slam-canvas" width="400" height="400" style="width:100%;aspect-ratio:1;border-radius:8px;border:1px solid var(--border);background:#1a1a2e;"></canvas>
+                    <div style="display:flex;gap:10px;justify-content:center;margin-top:6px;font-size:.55rem;color:var(--dim);flex-wrap:wrap;">
+                        <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:3px;background:rgba(200,200,210,0.6);display:inline-block"></span>空地</span>
+                        <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:3px;background:#e74c3c;display:inline-block"></span>牆壁</span>
+                        <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:3px;background:rgba(80,180,255,0.85);display:inline-block"></span>軌跡</span>
+                        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:rgba(0,255,200,0.9);display:inline-block"></span>即時 LiDAR</span>
+                        <span style="display:flex;align-items:center;gap:3px"><span style="width:6px;height:6px;background:rgba(200,120,255,0.85);display:inline-block"></span>Frontier</span>
+                        <span style="display:flex;align-items:center;gap:3px"><span style="width:8px;height:8px;border:2px solid gold;border-radius:50%;display:inline-block"></span>目標</span>
+                        <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;background:#ffeb00;border:2px solid #000;border-radius:50%;display:inline-block"></span>機器人</span>
+                        <span id="slam-lidar-status" style="color:var(--dim)"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="log">
+            <div class="log-t">
+                <span>系統日誌</span>
+                <span class="log-cnt" id="log-cnt">0 筆</span>
+            </div>
+            <div class="log-ls" id="log-ls">
+                <div class="log-e">
+                    <span class="log-tm">--:--:--</span>
+                    <span class="log-lv lv-info">INFO</span>
+                    <span class="log-mg">系統待機</span>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // === Movement Joystick + Speed Slider ===
+        const joy = nipplejs.create({ zone: document.getElementById('joystick-zone'), mode: 'static', position: { left: '50%', top: '50%' }, color: '#333', size: 100 });
+        let jX = 0, jY = 0;
+        let manualActive = false;
+        let manualSeq = 0;
+        const manualSession = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        let lastSentX = null, lastSentY = null, lastSendTs = 0;
+        let moveAbort = null;
+        const MANUAL_SEND_MIN_MS = 45;
+        const MANUAL_HEARTBEAT_MS = 90;
+        const MANUAL_DEADZONE = 0.04;
+        // 手動控制速度倍率（0.05 ~ 1.0），由右側滑桿控制
+        let speedMult = 0.60;
+        try {
+            const savedSpd = parseFloat(localStorage.getItem('rescueManualSpeed'));
+            if (!isNaN(savedSpd) && savedSpd >= 0.05 && savedSpd <= 1.0) speedMult = savedSpd;
+        } catch (e) {}
+        const spdSlider = document.getElementById('spd-slider');
+        const spdVal = document.getElementById('spd-val');
+        if (spdSlider) {
+            spdSlider.value = Math.round(speedMult * 100);
+            if (spdVal) spdVal.textContent = spdSlider.value;
+            spdSlider.addEventListener('input', (e) => {
+                const pct = parseInt(e.target.value, 10);
+                speedMult = pct / 100;
+                if (spdVal) spdVal.textContent = pct;
+                try { localStorage.setItem('rescueManualSpeed', String(speedMult)); } catch (e) {}
+                if (manualActive) sendCurrentManual(true);
+            });
+        }
+        function manualAxis(v) {
+            const scaled = v * speedMult;
+            if (Math.abs(scaled) < MANUAL_DEADZONE) return 0;
+            return Math.round(scaled * 100) / 100;
+        }
+        function sendManualMove(x, y, opts = {}) {
+            const force = Boolean(opts.force);
+            const stop = Boolean(opts.stop);
+            const now = performance.now();
+            const rx = stop ? 0 : x;
+            const ry = stop ? 0 : y;
+
+            if (!force && !stop && now - lastSendTs < MANUAL_SEND_MIN_MS) return;
+            if (!force && !stop && rx === lastSentX && ry === lastSentY && now - lastSendTs < MANUAL_HEARTBEAT_MS) return;
+
+            lastSentX = rx;
+            lastSentY = ry;
+            lastSendTs = now;
+            manualSeq += 1;
+
+            const body = JSON.stringify({ action: 'move', vx: rx, vy: ry, omega: 0, seq: manualSeq, session: manualSession });
+            if (stop) {
+                try {
+                    const blob = new Blob([body], { type: 'application/json' });
+                    if (navigator.sendBeacon && navigator.sendBeacon('/control', blob)) return;
+                } catch (e) {}
+                fetch('/control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body,
+                    keepalive: true,
+                    cache: 'no-store'
+                }).catch(() => {});
+                return;
+            }
+
+            try {
+                if (moveAbort) moveAbort.abort();
+                moveAbort = new AbortController();
+            } catch (e) {
+                moveAbort = null;
+            }
+            fetch('/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body,
+                signal: moveAbort ? moveAbort.signal : undefined,
+                cache: 'no-store'
+            }).catch(() => {});
+        }
+        function sendCurrentManual(force = false) {
+            sendManualMove(manualAxis(jX), manualAxis(jY), { force });
+        }
+        function hardStopManual() {
+            if (!manualActive && (lastSentX === null || (lastSentX === 0 && lastSentY === 0))) return;
+            manualActive = false;
+            jX = 0;
+            jY = 0;
+            lastSentX = null;
+            lastSentY = null;
+            sendManualMove(0, 0, { force: true, stop: true });
+        }
+        joy.on('start', () => {
+            manualActive = true;
+            sendCurrentManual(true);
+        });
+        joy.on('move', (e, d) => {
+            manualActive = true;
+            jX = d.vector.x;
+            jY = d.vector.y;
+            sendCurrentManual(false);
+        });
+        joy.on('end', hardStopManual);
+        setInterval(() => {
+            if (manualActive) sendCurrentManual(true);
+        }, MANUAL_HEARTBEAT_MS);
+        ['pointerup', 'pointercancel', 'touchend', 'touchcancel', 'mouseup'].forEach((evt) => {
+            window.addEventListener(evt, () => { if (manualActive) hardStopManual(); }, { passive: true });
+        });
+        window.addEventListener('blur', hardStopManual);
+        window.addEventListener('pagehide', hardStopManual);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) hardStopManual();
+        });
+
+        // === Servo Joystick ===
+        // === Map Panel Toggle ===（只保留 SLAM 地圖）
+        // === 佈局切換 ===
+        function toggleLayout() {
+            const isHorizontal = document.body.classList.toggle('horizontal');
+            document.getElementById('layout-btn').textContent = isHorizontal ? '直向' : '橫向';
+            try { localStorage.setItem('rescueLayout', isHorizontal ? 'h' : 'v'); } catch (e) {}
+            // 橫向模式：自動打開地圖面板
+            if (isHorizontal && !mapOpen) {
+                toggleMap();
+            }
+            // 重新初始化 slam map canvas（寬度變了）
+            setTimeout(() => {
+                if (typeof SlamMap !== 'undefined') {
+                    window._slamMap = new SlamMap('slam-canvas');
+                    window._slamMap._lastSeq = -1;
+                    window._slamMap._lastPoseSig = null;
+                    window._slamMap._lastHistLen = 0;
+                }
+            }, 300);
+        }
+        // 啟動時恢復上次偏好
+        window.addEventListener('DOMContentLoaded', () => {
+            try {
+                const saved = localStorage.getItem('rescueLayout');
+                if (saved === 'h') {
+                    document.body.classList.add('horizontal');
+                    document.getElementById('layout-btn').textContent = '直向';
+                }
+            } catch (e) {}
+        });
+
+        let mapOpen = false;
+        function toggleMap() {
+            mapOpen = !mapOpen;
+            const p = document.getElementById('map-pnl'), b = document.getElementById('map-btn');
+            if (mapOpen) {
+                p.classList.add('open'); p.style.maxHeight = '600px';
+                b.classList.add('on'); b.textContent = '地圖面板 (ON)';
+                setTimeout(() => {
+                    if (typeof SlamMap !== 'undefined') {
+                        window._slamMap = new SlamMap('slam-canvas');
+                        window._slamMap._lastSeq = -1;
+                        window._slamMap._lastPoseSig = null;
+                        window._slamMap._lastHistLen = 0;
+                    }
+                }, 100);
+            } else {
+                p.classList.remove('open'); p.style.maxHeight = '0';
+                b.classList.remove('on'); b.textContent = '地圖面板 (OFF)';
+            }
+        }
+
+        // === Mode & Options ===
+        function setMode(m) { fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: m === 'manual' ? 'mode_manual' : 'mode_auto' }) }).catch(() => { }) }
+        function emergencyStop() { fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'stop' }) }).catch(() => { }) }
+        function servoHome() { fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'home' }) }).catch(() => { }) }
+        function setSearchMode(m) { fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'search_mode', search_mode: m }) }).catch(() => { }) }
+        function setBrightness(v) { fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set_brightness', value: parseInt(v) }) }).catch(() => { }) }
+        function cmd(action) { fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: action }) }).catch(() => { }) }
+
+        // === 完全重建 SLAM 地圖（重啟 rescue-lidar.service）===
+        function rebuildSlamMap() {
+            if (!confirm('完全重建地圖：將重啟 SLAM 服務，清空所有已掃描資料。\n車子會停車約 15 秒才能再次移動。\n\n確定要繼續嗎？')) return;
+            // 顯示全螢幕遮罩 overlay
+            const ov = document.createElement('div');
+            ov.id = 'slam-restart-overlay';
+            ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;font-family:sans-serif;';
+            ov.innerHTML = `
+                <div style="background:#1e293b;padding:28px 40px;border-radius:12px;border:2px solid #b91c1c;text-align:center;min-width:280px;">
+                    <div style="font-size:1.3rem;font-weight:700;margin-bottom:10px;">⏳ SLAM 重建中</div>
+                    <div id="slam-restart-msg" style="font-size:.85rem;color:#cbd5e1;margin-bottom:16px;">正在重啟 rescue-lidar.service…</div>
+                    <div style="width:240px;height:6px;background:#334155;border-radius:3px;overflow:hidden;">
+                        <div id="slam-restart-bar" style="height:100%;background:linear-gradient(90deg,#f87171,#fbbf24,#4ade80);width:0%;transition:width 0.2s linear;"></div>
+                    </div>
+                    <div id="slam-restart-sec" style="font-size:.7rem;color:#94a3b8;margin-top:10px;">0 / 18 秒</div>
+                </div>
+            `;
+            document.body.appendChild(ov);
+
+            fetch('/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restart_slam' }) }).catch(() => {});
+
+            // 18 秒倒數進度條（systemctl restart + SLAM warm-up）
+            const total = 18;
+            let elapsed = 0;
+            const bar = ov.querySelector('#slam-restart-bar');
+            const sec = ov.querySelector('#slam-restart-sec');
+            const msg = ov.querySelector('#slam-restart-msg');
+            const timer = setInterval(() => {
+                elapsed += 0.2;
+                const pct = Math.min(100, (elapsed / total) * 100);
+                bar.style.width = pct + '%';
+                sec.textContent = elapsed.toFixed(1) + ' / ' + total + ' 秒';
+                if (elapsed >= 5 && elapsed < 12) msg.textContent = 'ydlidar_driver 重新連線中…';
+                else if (elapsed >= 12 && elapsed < 16) msg.textContent = 'slam_toolbox 建圖初始化…';
+                else if (elapsed >= 16) msg.textContent = '即將完成，重新載入地圖…';
+                if (elapsed >= total) {
+                    clearInterval(timer);
+                    // 觸發一次刷新讓 ros_bridge 重新訂閱 /map，再移除遮罩
+                    cmd('refresh_slam_map');
+                    setTimeout(() => {
+                        if (ov.parentNode) ov.parentNode.removeChild(ov);
+                        // 重建 slam canvas（清快取）
+                        if (typeof SlamMap !== 'undefined') {
+                            window._slamMap = new SlamMap('slam-canvas');
+                            window._slamMap._lastSeq = -1;
+                            window._slamMap._lastPoseSig = null;
+                            window._slamMap._lastHistLen = 0;
+                        }
+                    }, 500);
+                }
+            }, 200);
+        }
+
+        // === Status Polling ===
+        const cMap = { STANDBY:'badge-standby', SEARCH:'badge-search', ANOMALY:'badge-anomaly', LOCK_ON:'badge-lock_on', INQUIRY:'badge-inquiry', CONFIRM:'badge-confirm', REPORT:'badge-report', MANUAL:'badge-manual' };
+        let prevLogLen = 0;
+
+        function poll() {
+            fetch('/status?map=' + (mapOpen ? '1' : '0')).then(r => r.json()).then(d => {
+                const stage = d.mission_stage || 'STANDBY';
+                document.getElementById('state-badge').className = 'badge ' + (cMap[stage] || 'badge-standby');
+                document.getElementById('state-text').textContent = stage;
+                document.getElementById('mode-tag').textContent = d.mode.toUpperCase();
+
+                document.getElementById('btn-auto').classList.toggle('on', d.mode === 'auto');
+                document.getElementById('btn-manual').classList.toggle('on', d.mode === 'manual');
+
+                // 手動模式鎖定自動巡邏控制選項
+                const isManual = d.mode === 'manual';
+                ['sm-F'].forEach(id => {
+                    const btn = document.getElementById(id);
+                    if (btn) { btn.disabled = isManual; btn.style.opacity = isManual ? '0.35' : '1'; }
+                });
+
+                if (d.search_mode) {
+                    ['F'].forEach(m => {
+                        const btn = document.getElementById('sm-' + m);
+                        if (btn) {
+                            const isOn = d.search_mode === m;
+                            btn.classList.toggle('on', isOn);
+                            btn.style.background = isOn ? '#1a1a1a' : '';
+                            btn.style.color = isOn ? '#fff' : '';
+                        }
+                    });
+                }
+
+                const pe = document.getElementById('v-person'); pe.textContent = d.person_count;
+                pe.className = 'st-v ' + (d.person_count > 0 ? 'c-w' : 'c-n');
+                document.getElementById('st-person').classList.toggle('danger', d.person_count > 0);
+
+                const di = document.getElementById('v-dist');
+                if (d.distance_cm < 0) { di.textContent = '--'; di.className = 'st-v c-n'; document.getElementById('st-dist').classList.remove('danger') }
+                else { di.textContent = d.distance_cm; di.className = 'st-v ' + (d.distance_cm < 30 ? 'c-d' : d.distance_cm < 50 ? 'c-w' : 'c-s'); document.getElementById('st-dist').classList.toggle('danger', d.distance_cm < 30) }
+
+                const sc = document.getElementById('v-score');
+                const vs = d.victim_score || 0;
+                sc.textContent = vs.toFixed(2);
+                sc.className = 'st-v ' + (vs >= 0.6 ? 'c-d' : vs >= 0.3 ? 'c-w' : 'c-s');
+                document.getElementById('st-score').classList.toggle('danger', vs >= 0.6);
+
+                const fa = document.getElementById('v-fallen'); fa.textContent = d.fallen_count;
+                fa.className = 'st-v ' + (d.fallen_count > 0 ? 'c-d' : 'c-n');
+                document.getElementById('st-fallen').classList.toggle('danger', d.fallen_count > 0);
+
+                document.getElementById('v-alert').textContent = d.alert_count;
+                document.getElementById('v-fps').textContent = d.fps || '--';
+                document.getElementById('perf-info').textContent = (d.fps || '--') + ' fps | ' + (d.detect_ms || '--') + ' ms';
+
+                // 生命徵象面板更新（rPPG 心率 / 呼吸率 / 眨眼率 / 意識 / 微動 / 眼睛）
+                // 策略：偵測到人但資料尚未就緒時，顯示「建立中 N/Ns」或「偵測中」而非 "--"
+                const hasPerson = (d.person_count || 0) > 0;
+
+                // —— 心率 ——
+                const hr = d.heart_rate_bpm;
+                const hrEl = document.getElementById('vital-hr');
+                const hrqEl = document.getElementById('vital-hr-q');
+                if (hrEl && hrqEl) {
+                    const hrBufRatio = d.hr_buffer_ratio || 0;
+                    if (hr > 0) {
+                        hrEl.textContent = Math.round(hr);
+                        hrEl.style.fontSize = '';
+                        const q = d.rppg_signal_quality || 'UNKNOWN';
+                        const conf = d.rppg_confidence || 0;
+                        hrqEl.textContent = q + ' · ' + Math.round(conf * 100) + '%';
+                    } else if (hasPerson) {
+                        hrEl.textContent = '…';
+                        hrEl.style.fontSize = '.75rem';
+                        hrqEl.textContent = '建立中 ' + Math.round(hrBufRatio * 100) + '%';
+                    } else {
+                        hrEl.textContent = '--';
+                        hrEl.style.fontSize = '';
+                        hrqEl.textContent = '—';
+                    }
+                }
+
+                // —— 呼吸率 ——
+                const rr = d.respiration_rate;
+                const rrEl = document.getElementById('vital-rr');
+                const rrqEl = document.getElementById('vital-rr-q');
+                if (rrEl && rrqEl) {
+                    const rrBufRatio = d.rr_buffer_ratio || 0;
+                    if (rr > 0) {
+                        rrEl.textContent = Math.round(rr);
+                        rrEl.style.fontSize = '';
+                        rrqEl.textContent = '信心 ' + Math.round((d.resp_confidence || 0) * 100) + '%';
+                    } else if (hasPerson) {
+                        rrEl.textContent = '…';
+                        rrEl.style.fontSize = '.75rem';
+                        // 呼吸率 min buffer ~8s；以 min 為分母，達 100% 代表進入計算階段
+                        rrqEl.textContent = '建立中 ' + Math.round(rrBufRatio * 100) + '%';
+                    } else {
+                        rrEl.textContent = '--';
+                        rrEl.style.fontSize = '';
+                        rrqEl.textContent = '—';
+                    }
+                }
+
+                // —— 眨眼率 ——
+                const blink = d.blink_rate_per_min;
+                const blinkEl = document.getElementById('vital-blink');
+                if (blinkEl) {
+                    const bwr = d.blink_warmup_ratio || 0;
+                    if (blink >= 0) {
+                        blinkEl.textContent = blink.toFixed(0);
+                        blinkEl.style.fontSize = '';
+                    } else if (hasPerson && (d.eye_state || 'UNKNOWN') !== 'UNKNOWN') {
+                        blinkEl.textContent = '…';
+                        blinkEl.style.fontSize = '.7rem';
+                    } else if (hasPerson) {
+                        blinkEl.textContent = '偵測';
+                        blinkEl.style.fontSize = '.6rem';
+                    } else {
+                        blinkEl.textContent = '--';
+                        blinkEl.style.fontSize = '';
+                    }
+                }
+
+                // —— 意識狀態 ——
+                const consEl = document.getElementById('vital-cons');
+                if (consEl) {
+                    let cs = d.consciousness_state || 'UNKNOWN';
+                    // 偵測到人但眼睛資料 UNKNOWN（例如距離遠/側臉）→ 顯示「偵測中」
+                    if (cs === 'UNKNOWN' && hasPerson) {
+                        cs = '偵測中';
+                        consEl.className = 'vital-v cons-unknown';
+                        consEl.textContent = cs;
+                    } else {
+                        consEl.textContent = cs;
+                        consEl.className = 'vital-v cons-' + cs.toLowerCase();
+                    }
+                }
+
+                // —— 微動 ——
+                const mm = d.micro_motion_score || 0;
+                const mmFill = document.getElementById('vital-micro-fill');
+                if (mmFill) {
+                    mmFill.style.width = (mm * 100).toFixed(0) + '%';
+                    mmFill.style.background = mm > 0.3 ? 'var(--safe)' : (mm > 0.05 ? '#16a085' : '#888');
+                }
+                const mmV = document.getElementById('vital-micro-v');
+                if (mmV) mmV.textContent = mm.toFixed(2);
+
+                // —— 眼睛狀態(標題右上)——
+                const eyeEl = document.getElementById('vital-eye');
+                if (eyeEl) {
+                    const es = d.eye_state || 'UNKNOWN';
+                    eyeEl.textContent = '眼:' + (es === 'UNKNOWN' ? '--' : es);
+                    eyeEl.style.color = es === 'OPEN' ? 'var(--safe)' : (es === 'CLOSED' ? 'var(--danger)' : 'var(--dim)');
+                }
+
+                // —— B5 綜合生命跡象 ——
+                const ovStatus = document.getElementById('vital-overall-status');
+                const ovFill   = document.getElementById('vital-overall-fill');
+                const ovVal    = document.getElementById('vital-overall-v');
+                const ovConf   = document.getElementById('vital-overall-conf');
+                if (ovStatus && ovFill && ovVal) {
+                    const vs = (d.vital_score === undefined) ? -1 : d.vital_score;
+                    const status = d.vital_status || '未知';
+                    const vc = d.vital_confidence || 0;
+                    ovStatus.textContent = status;
+                    // 狀態 → 樣式類別
+                    const cls = {
+                        '正常': 'vs-normal',
+                        '微弱': 'vs-weak',
+                        '失去意識': 'vs-unconscious',
+                        '無反應': 'vs-noresp',
+                        '建立中': 'vs-warmup',
+                        '未知': 'vs-unknown',
+                    }[status] || 'vs-unknown';
+                    ovStatus.className = 'vital-overall-badge ' + cls;
+                    // 進度條:vital_score 0-1 對應 0-100% 寬度
+                    if (vs >= 0) {
+                        ovFill.style.width = (vs * 100).toFixed(0) + '%';
+                        ovVal.textContent = vs.toFixed(2);
+                    } else {
+                        ovFill.style.width = '0%';
+                        ovVal.textContent = '--';
+                    }
+                    if (ovConf) {
+                        ovConf.textContent = '信心' + Math.round(vc * 100) + '%';
+                        ovConf.style.color = vc >= 0.7 ? 'var(--safe)' : (vc >= 0.4 ? 'var(--warn)' : 'var(--dim)');
+                    }
+                }
+
+                document.getElementById('dot-cam').className = 'sys-dot ' + (d.camera_ok ? 'on' : 'off');
+                const aiPaused = Boolean(d.ai_inference_paused || d.detection_stale);
+                document.getElementById('dot-ai').className = 'sys-dot ' + (d.ai_loaded ? (aiPaused ? 'paused' : 'on') : 'off');
+                const aiText = document.getElementById('ai-chip-text');
+                if (aiText) aiText.textContent = d.ai_loaded ? (aiPaused ? 'AI 暫停' : 'AI 偵測') : 'AI 離線';
+                document.getElementById('dot-gpio').className = 'sys-dot ' + (d.gpio_ok ? 'on' : 'off');
+                document.getElementById('dot-lidar').className = 'sys-dot ' + (d.lidar_available ? 'on' : 'off');
+                const rv = document.getElementById('reported-victims');
+                if (rv) rv.textContent = d.reported_victim_count || 0;
+
+                // 繪製 SLAM 地圖（含軌跡 + 機器人位置 + 即時 LiDAR 疊加）
+                if (window._slamMap) {
+                    window._slamMap.update(d.slam_map, d.slam_pose, d.pose_history, d.lidar_points, d.frontiers, d.reported_victims);
+                }
+                updateMapInfo(d.pose_history);
+
+                // LiDAR 狀態指示
+                const lidarSt = document.getElementById('slam-lidar-status');
+                if (lidarSt) {
+                    lidarSt.textContent = d.lidar_available ? 'LiDAR 連線中' : 'LiDAR 離線';
+                    lidarSt.style.color = d.lidar_available ? '#2ecc71' : '#e74c3c';
+                }
+
+                // 對講面板狀態
+                const icBtn = document.getElementById('btn-intercom');
+                const icPnl = document.getElementById('intercom-panel');
+                if (icBtn && icPnl) {
+                    const icOn = d.intercom_active;
+                    icBtn.style.background = icOn ? '#8e44ad' : '';
+                    icBtn.style.color = icOn ? '#fff' : '';
+                    icBtn.textContent = icOn ? '關閉對講' : '開啟對講';
+                    icPnl.style.display = icOn ? 'block' : 'none';
+                    if (icOn) loadPresets();
+                }
+
+                if (d.logs && d.logs.length > 0) {
+                    const ls = document.getElementById('log-ls');
+                    if (d.logs.length !== prevLogLen) {
+                        prevLogLen = d.logs.length;
+                        document.getElementById('log-cnt').textContent = d.logs.length + ' 筆';
+                        ls.innerHTML = '';
+                        d.logs.forEach(l => {
+                            const e = document.createElement('div'); e.className = 'log-e';
+                            const lvc = { 'info': 'lv-info', 'warn': 'lv-warn', 'danger': 'lv-danger' }[l.level] || 'lv-info';
+                            const lvt = { 'info': 'INFO', 'warn': 'WARN', 'danger': 'ALERT' }[l.level] || 'INFO';
+                            e.innerHTML = '<span class="log-tm">' + l.time + '</span><span class="log-lv ' + lvc + '">' + lvt + '</span><span class="log-mg">' + l.msg + '</span>';
+                            ls.appendChild(e);
+                        });
+                    }
+                }
+            }).catch(() => { });
+        }
+        setInterval(poll, 600);
+        poll();
+
+        // === 軌跡點數 ===（替代原本的探索地圖 coverage 顯示）
+        function updateMapInfo(poseHistory) {
+            const covEl = document.getElementById('map-coverage');
+            if (covEl) covEl.textContent = (poseHistory ? poseHistory.length : 0);
+        }
+
+        // === Intercom ===
+        let icPresetsLoaded = false;
+        let icListening = false;
+        let icListenTimer = null;
+        let icAudioCtx = null;
+        let icGainNode = null;
+        let icNextPlayTime = 0;   // AudioContext.currentTime 下一次播放起點（無縫排程）
+
+        function toggleListen() {
+            icListening = !icListening;
+            const btn = document.getElementById('btn-listen');
+            if (icListening) {
+                btn.style.background = '#27ae60';
+                btn.style.color = '#fff';
+                btn.textContent = '收音 ON';
+                if (!icAudioCtx) {
+                    icAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    icGainNode = icAudioCtx.createGain();
+                    icGainNode.gain.value = 1.5;  // 客戶端再 1.5× 放大（伺服器已 5×）
+                    icGainNode.connect(icAudioCtx.destination);
+                }
+                // 若先前被瀏覽器自動暫停（需要使用者互動），在此恢復
+                if (icAudioCtx.state === 'suspended') icAudioCtx.resume();
+                icNextPlayTime = icAudioCtx.currentTime + 0.15;   // 緩衝 150ms 避免抖動
+                icListenLoop();
+            } else {
+                btn.style.background = '';
+                btn.style.color = '';
+                btn.textContent = '收音 OFF';
+                if (icListenTimer) { clearTimeout(icListenTimer); icListenTimer = null; }
+            }
+        }
+
+        async function icListenLoop() {
+            if (!icListening) return;
+            try {
+                const resp = await fetch('/intercom/listen?t=' + Date.now());
+                if (resp.ok && resp.status === 200) {
+                    const ab = await resp.arrayBuffer();
+                    if (ab.byteLength > 44) {
+                        const audioBuf = await icAudioCtx.decodeAudioData(ab);
+                        const src = icAudioCtx.createBufferSource();
+                        src.buffer = audioBuf;
+                        src.connect(icGainNode);
+
+                        // 無縫排程：下一個 chunk 在上一個結束後立即播放
+                        const now = icAudioCtx.currentTime;
+                        const startAt = Math.max(now + 0.02, icNextPlayTime);
+                        src.start(startAt);
+                        icNextPlayTime = startAt + audioBuf.duration;
+
+                        // 若排程落後太多（網路延遲累積），拉回當前時間避免嚴重 lag
+                        if (icNextPlayTime - now > 1.2) {
+                            icNextPlayTime = now + 0.2;
+                        }
+                    }
+                }
+            } catch (e) { /* ignore */ }
+            // v2: 縮短輪詢週期與伺服器 fetch 能力對齊（避免長間隔造成破音）
+            icListenTimer = setTimeout(icListenLoop, 200);
+        }
+
+        function icSpeak() {
+            const text = document.getElementById('ic-text').value.trim();
+            if (!text) return;
+            fetch('/control', { method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({action:'intercom_speak', text: text})
+            }).catch(()=>{});
+            document.getElementById('ic-text').value = '';
+        }
+
+        // Enter 鍵發送
+        document.addEventListener('DOMContentLoaded', () => {
+            const inp = document.getElementById('ic-text');
+            if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') icSpeak(); });
+        });
+
+        function loadPresets() {
+            if (icPresetsLoaded) return;
+            fetch('/intercom/presets').then(r=>r.json()).then(list => {
+                const el = document.getElementById('ic-presets');
+                if (!el) return;
+                el.innerHTML = '';
+                list.forEach(msg => {
+                    const b = document.createElement('button');
+                    b.className = 'btn';
+                    b.style.cssText = 'padding:4px 8px;font-size:.6rem;width:auto;white-space:nowrap;';
+                    b.textContent = msg.length > 12 ? msg.substring(0,12)+'...' : msg;
+                    b.title = msg;
+                    b.onclick = () => {
+                        fetch('/control', { method:'POST', headers:{'Content-Type':'application/json'},
+                            body: JSON.stringify({action:'intercom_speak', text: msg})
+                        }).catch(()=>{});
+                    };
+                    el.appendChild(b);
+                });
+                icPresetsLoaded = true;
+            }).catch(()=>{});
+        }
+    </script>
+
+</body>
+
+</html>
